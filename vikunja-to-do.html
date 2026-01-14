@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  
   body, html {
     margin: 0; padding: 0;
     width: 100%; height: 100%;
@@ -33,42 +32,32 @@
     justify-content: space-between;
     align-items: center; transition: all 0.3s ease;
   }
-  /* 自定義 Checkbox 樣式 */
   .cb-container {
     display: block; position: relative;
     width: 20px; height: 20px;
     margin-right: 12px; cursor: pointer;
     flex-shrink: 0;
   }
-  .cb-container input {
-    position: absolute; opacity: 0;
-    cursor: pointer; height: 0; width: 0;
-  }
+  .cb-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
   .checkmark {
     position: absolute; top: 0; left: 0;
     height: 20px; width: 20px;
-    background-color: transparent;
-    border: 2px solid #444;
+    background-color: transparent; border: 2px solid #444;
     border-radius: 50%; transition: all 0.2s;
   }
-  .cb-container:hover .checkmark {
-    border-color: #4db8ff;
-  }
-  .cb-container input:checked ~ .checkmark {
-    background-color: #4db8ff;
-    border-color: #4db8ff;
-  }
+  .cb-container input:checked ~ .checkmark { background-color: #4db8ff; border-color: #4db8ff; }
   .checkmark:after {
-    content: ""; position: absolute;
-    display: none; left: 6px; top: 2px;
-    width: 5px; height: 10px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
+    content: ""; position: absolute; display: none;
+    left: 6px; top: 2px; width: 5px; height: 10px;
+    border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg);
   }
-  .cb-container input:checked ~ .checkmark:after {
-    display: block;
-  }
+  .cb-container input:checked ~ .checkmark:after { display: block; }
+
+  /* 新增樣式 */
+  .task-link { color: #eee; text-decoration: none; transition: color 0.2s; }
+  .task-link:hover { color: #4db8ff; }
+  .time-edit { cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+  .time-edit:hover { background: rgba(255,255,255,0.1); }
 </style>
 </head>
 <body>
@@ -84,6 +73,7 @@
 <script>
 const API_BASE = 'https://todo.yichlin.com/api/v1';
 const TOKEN = 'tk_d138d298cea5d29e0585de424907470b79c7c10d';
+const UI_BASE = 'https://todo.yichlin.com'; // 網頁端 UI 網址
 
 function getRelativeDateLabel(date) {
   const now = new Date();
@@ -91,7 +81,6 @@ function getRelativeDateLabel(date) {
   const target = new Date(date);
   target.setHours(0, 0, 0, 0);
   const diffDays = Math.floor((target - now) / (1000 * 60 * 60 * 24));
-
   if (diffDays === 0) return "今天";
   if (diffDays === 1) return "明天";
   if (diffDays === 2) return "後天";
@@ -103,19 +92,60 @@ async function markTaskDone(taskId, cardEl) {
   try {
     const res = await fetch(`${API_BASE}/tasks/${taskId}`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${TOKEN}`,
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ done: true })
     });
-    if (!res.ok) throw new Error("API 更新失敗");
-    
+    if (!res.ok) throw new Error("更新失敗");
     cardEl.style.transform = 'translateX(20px)';
     cardEl.style.opacity = '0';
     setTimeout(() => cardEl.remove(), 300);
-  } catch (err) {
-    alert("標記失敗: " + err.message);
+  } catch (err) { alert("標記失敗: " + err.message); }
+}
+
+async function editTaskTime(taskId, currentIso) {
+  try {
+    // 1. 先抓取該任務目前的完整狀態
+    const getRes = await fetch(`${API_BASE}/tasks/${taskId}`, {
+      headers: { 'Authorization': `Bearer ${TOKEN}` }
+    });
+    if (!getRes.ok) throw new Error("無法獲取任務詳情");
+    const currentTask = await getRes.json();
+
+    // 2. 處理時間輸入
+    const oldDate = new Date(currentIso);
+    const oldTime = oldDate.toLocaleTimeString([], {
+      hour: '2-digit', minute:'2-digit', hour12: false
+    });
+    const newTime = prompt("請輸入新時間 (HH:mm):", oldTime);
+    
+    if (!newTime || newTime === oldTime) return;
+    
+    const [hours, minutes] = newTime.split(':');
+    if (isNaN(hours) || isNaN(minutes)) { 
+      alert("格式錯誤"); return; 
+    }
+
+    const newDate = new Date(oldDate);
+    newDate.setHours(parseInt(hours), parseInt(minutes));
+
+    // 3. 將原任務資料與新日期合併後送出
+    const updateRes = await fetch(`${API_BASE}/tasks/${taskId}`, {
+      method: 'POST',
+      headers: { 
+        'Authorization': `Bearer ${TOKEN}`, 
+        'Content-Type': 'application/json' 
+      },
+      // 使用展開運算子保留所有屬性，僅覆蓋 due_date
+      body: JSON.stringify({ 
+        ...currentTask, 
+        due_date: newDate.toISOString() 
+      })
+    });
+
+    if (!updateRes.ok) throw new Error("更新失敗");
+    initDashboard(); // 重新整理頁面
+  } catch (err) { 
+    alert("時間修改失敗: " + err.message); 
   }
 }
 
@@ -127,10 +157,8 @@ async function initDashboard() {
   });
 
   const prioMap = {
-    1: { icon: '⚪', color: '#888' },
-    2: { icon: '🔵', color: '#4db8ff' },
-    3: { icon: '🟡', color: '#ffcc00' },
-    4: { icon: '🟠', color: '#ff9900' },
+    1: { icon: '⚪', color: '#888' }, 2: { icon: '🔵', color: '#4db8ff' },
+    3: { icon: '🟡', color: '#ffcc00' }, 4: { icon: '🟠', color: '#ff9900' },
     5: { icon: '🔴', color: '#ff4d4d' }
   };
 
@@ -139,7 +167,8 @@ async function initDashboard() {
       headers: { 'Authorization': `Bearer ${TOKEN}` }
     });
     let tasks = await res.json();
-    tasks = tasks.filter(t => t.due_date && !t.due_date.startsWith('0001'))
+    tasks = (Array.isArray(tasks) ? tasks : [])
+                 .filter(t => t.due_date && !t.due_date.startsWith('0001'))
                  .sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
 
     listEl.innerHTML = '';
@@ -176,11 +205,16 @@ async function initDashboard() {
             <span class="checkmark"></span>
           </label>
           <div style="flex:1; overflow:hidden;">
-            <div style="font-size:0.9em; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-              ${t.title}
+            <div style="font-size:0.9em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              <a href="${UI_BASE}/tasks/${t.id}" target="_blank" class="task-link">
+                ${t.title}
+              </a>
             </div>
           </div>
-          <div style="font-size:0.75em; color:${p.color}; font-weight:700; margin-left:8px;">${time}</div>
+          <div class="time-edit" style="font-size:0.75em; color:${p.color}; font-weight:700; margin-left:8px;" 
+               onclick="editTaskTime(${t.id}, '${t.due_date}')">
+            ${time}
+          </div>
         `;
         listEl.appendChild(card);
       });
