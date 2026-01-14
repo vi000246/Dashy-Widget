@@ -6,52 +6,44 @@
   body, html {
     margin: 0; padding: 0;
     width: 100%; height: 100%;
-    background: transparent;
-    overflow: hidden; /* 隱藏外部捲軸 */
+    background: transparent; overflow: hidden;
   }
   #vikunja-dashboard {
-    background: #121212; /* 或設為 transparent */
-    color: #fff;
+    background: #121212; color: #fff;
     font-family: 'Inter', sans-serif;
-    /* 移除寬度限制與圓角陰影 */
-    width: 400px; height: 100vh;
-    padding: 12px;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-  }
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 12px;
+    width: 100%; height: 100vh;
+    padding: 12px; box-sizing: border-box;
+    display: flex; flex-direction: column;
   }
   .task-list {
-    flex: 1; /* 自動填滿剩餘高度 */
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    overflow-y: auto;
-    padding-right: 4px;
-  }
-  /* 自定義捲軸樣式 */
-  .task-list::-webkit-scrollbar { width: 4px; }
-  .task-list::-webkit-scrollbar-thumb {
-    background: #444; border-radius: 4px;
+    flex: 1; display: flex;
+    flex-direction: column; gap: 8px;
+    overflow-y: auto; padding-top: 8px;
   }
 </style>
-
-
 </head>
 <body>
 
 <div id="vikunja-dashboard">
-  <div id="task-list" class="task-list">
+  <div style="display: flex; justify-content: space-between;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span>🐈‍⬛</span>
+      <span style="font-weight: 700; font-size: 0.9em;">TASK CENTER</span>
     </div>
+    <span id="task-count" style="background: #4db8ff; 
+      color: #000; padding: 2px 8px; border-radius: 12px; 
+      font-size: 0.75em; font-weight: bold;">0</span>
+  </div>
+
+  <div id="task-list" class="task-list">
+    <div id="status-msg" style="text-align: center; color: #666; font-size: 0.8em; padding: 20px;">
+      資料同步中... 🔄
+    </div>
+  </div>
 </div>
 
 <script>
-(async () => {
+async function initDashboard() {
   const listEl = document.getElementById('task-list');
   const countEl = document.getElementById('task-count');
   
@@ -63,75 +55,59 @@
   });
 
   const prioMap = {
-    1: { icon: '⚪', label: 'Low', color: '#888' },
-    2: { icon: '🔵', label: 'Medium', color: '#4db8ff' },
-    3: { icon: '🟡', label: 'High', color: '#ffcc00' },
-    4: { icon: '🟠', label: 'Urgent', color: '#ff9900' },
-    5: { icon: '🔴', label: 'DO NOW', color: '#ff4d4d' }
+    1: { icon: '⚪', color: '#888' },
+    2: { icon: '🔵', color: '#4db8ff' },
+    3: { icon: '🟡', color: '#ffcc00' },
+    4: { icon: '🟠', color: '#ff9900' },
+    5: { icon: '🔴', color: '#ff4d4d' }
   };
 
   try {
     const res = await fetch(`${url}?${params}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     
     const tasks = await res.json();
-    listEl.innerHTML = '';
-    
+    if (!Array.isArray(tasks)) throw new Error("API 格式錯誤");
+
     const now = new Date();
-    // 取得今日任務
-    const todayTasks = (tasks || []).filter(t => {
-      if (!t.due_date || t.due_date.startsWith('0001')) 
-        return false;
-      return new Date(t.due_date).toDateString() === 
-             now.toDateString();
+    const todayTasks = tasks.filter(t => {
+      if (!t.due_date || t.due_date.startsWith('0001')) return false;
+      return new Date(t.due_date).toDateString() === now.toDateString();
     });
 
-    countEl.innerText = todayTasks.length;
+    // 安全設定數字，防止 null 錯誤
+    if (countEl) countEl.innerText = todayTasks.length;
+    listEl.innerHTML = '';
 
     if (todayTasks.length === 0) {
-      listEl.innerHTML = '<div style="text-align:center; padding:20px;">🐾 今日無任務</div>';
+      listEl.innerHTML = '<div style="text-align:center;color:#444;padding:20px;">🐾 今日暫無任務</div>';
       return;
     }
 
     todayTasks.forEach(t => {
       const due = new Date(t.due_date);
-      const time = due.toLocaleTimeString([], 
-        {hour: '2-digit', minute:'2-digit', hour12: false});
+      const time = due.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
       const p = prioMap[t.priority] || prioMap[1];
       
       const card = document.createElement('div');
-      card.style.cssText = `
-        background: #1e1e1e; padding: 12px;
-        border-radius: 12px; border-left: 4px solid ${p.color};
-        display: flex; justify-content: space-between;
-        align-items: center;
-      `;
-      
+      card.style.cssText = `background:#1e1e1e; padding:10px; border-radius:10px; border-left:4px solid ${p.color}; display:flex; justify-content:space-between; align-items:center;`;
       card.innerHTML = `
-        <div style="overflow: hidden; flex: 1;">
-          <div style="font-size: 0.85em; color: #eee;
-              white-space: nowrap; overflow: hidden;
-              text-overflow: ellipsis;">
-            ${p.icon} ${t.title}
-          </div>
-          <div style="font-size: 0.65em; color: #555; margin-top: 4px;">
-            Priority: ${p.label}
-          </div>
+        <div style="overflow:hidden; flex:1; margin-right:8px;">
+          <div style="font-size:0.85em; color:#eee; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.icon} ${t.title}</div>
         </div>
-        <div style="font-size: 0.8em; color: ${p.color}; 
-            font-weight: bold;">
-          ${time}
-        </div>
+        <div style="font-size:0.8em; color:${p.color}; font-weight:bold;">${time}</div>
       `;
       listEl.appendChild(card);
     });
   } catch (err) {
-    listEl.innerHTML = `<div style="color:#ff4d4d; font-size:0.7em;">❌ 錯誤: ${err.message}</div>`;
+    if (listEl) listEl.innerHTML = `<div style="color:#ff4d4d; font-size:0.7em; padding:10px;">❌ ${err.message}</div>`;
   }
-})();
+}
+
+// 確保網頁載入後才執行 JS
+window.onload = initDashboard;
 </script>
 </body>
 </html>
